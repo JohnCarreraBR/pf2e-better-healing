@@ -1,0 +1,215 @@
+<form class="healing-accumulator-form" autocomplete="off">
+
+  <div class="tracker-time-header">
+    <div class="time-block">
+      <i class="fas fa-clock"></i> Time Elapsed: <span class="time-value">{{timeDisplayString}}</span>
+    </div>
+    
+    <div class="header-buttons">
+      <button type="button" class="wait-btn" data-action="stepTimerTenMins" title="Advance time by 10 minutes">
+        <i class="fas fa-hourglass-half"></i> Wait 10m
+      </button>
+      <button type="button" class="reset-time-btn" data-action="resetTimer" title="Reset Session Clock & Immunity Timers">
+        <i class="fas fa-undo"></i> Reset
+      </button>
+    </div>
+  </div>
+
+  <div class="actor-list">
+    {{#each actors}}
+      <div class="actor-row {{#if this.isFull}}fully-healed{{/if}} {{#if this.isImmune}}immune-cooldown{{/if}}" data-id="{{this.id}}">
+        
+        <div class="token-portrait">
+          <img src="{{this.img}}" title="{{this.name}}" alt="{{this.name}}" />
+        </div>
+
+        <div class="character-details">
+          <div class="character-name">
+            {{this.name}}
+            {{#if this.isImmune}}
+              <span class="immunity-text-badge"><i class="fas fa-shield-alt"></i> Immune ({{this.cooldownRemaining}}m)</span>
+            {{/if}}
+          </div>
+          
+          <div class="health-bar-container">
+            <div class="health-bar" style="width: {{this.hpPercent}}%;"></div>
+            <span class="hp-text">{{this.hpValue}} / {{this.hpMax}} HP</span>
+          </div>
+        </div>
+
+        <div class="action-controls">
+          
+          <div class="accumulator-status">
+            <span class="value-display {{#if (lt this.accumulatedHealing 0)}}damage-negative{{/if}} font-pf-numeric">
+              {{#if (gt this.accumulatedHealing 0)}}+{{/if}}{{this.accumulatedHealing}}
+            </span>
+            
+            {{#if this.accumulatedHealsToFull}}
+              <span class="badge heals-to-full-tag"><i class="fas fa-check-circle"></i> Heals to Full</span>
+            {{/if}}
+          </div>
+
+          {{#if this.isImmune}}
+            <button type="button" class="pf2e-btn roll-button immune-disabled" disabled title="Immune to Treat Wounds">
+              <i class="fas fa-lock"></i> {{this.cooldownRemaining}}m
+            </button>
+          {{else}}
+            <button type="button" class="pf2e-btn roll-button" data-action="rollTreatWounds" data-actor-id="{{this.id}}" title="Roll Treat Wounds">
+              <i class="fas fa-dice-d20"></i> Treat
+            </button>
+          {{/if}}
+          
+          <button type="button" class="pf2e-btn apply-button" data-action="applyHealing" data-actor-id="{{this.id}}" title="Apply Pool Values to Sheet">
+            <i class="fas fa-check"></i> Apply
+          </button>
+        </div>
+
+      </div>
+    {{/each}}
+  </div>
+
+  <div class="footer-action-tray">
+    <button type="button" class="pf2e-btn apply-all-btn" data-action="applyAllHealing">
+      <i class="fas fa-heartbeat"></i> Apply Accumulated Healing to All Characters
+    </button>
+  </div>
+
+  <style>
+    .healing-accumulator-form { 
+      padding: 12px; 
+      display: flex; 
+      flex-direction: column; 
+      height: 100%; 
+      width: 100%;
+      box-sizing: border-box;
+      gap: 12px;
+    }
+
+    /* Duration Header Styles */
+    .tracker-time-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(30, 30, 35, 0.7);
+      border: 1px solid #555;
+      border-radius: 4px;
+      padding: 8px 14px;
+      flex-shrink: 0;
+    }
+    .time-block { font-size: 1.15em; font-weight: bold; color: #e2e8f0; display: flex; align-items: center; gap: 8px; }
+    .time-value { color: #38bdf8; text-shadow: 1px 1px 1px #000; font-family: monospace; font-size: 1.2em; }
+    
+    .header-buttons { display: flex; gap: 6px; }
+    .wait-btn { background: #0284c7; color: #fff; border: 1px solid #0369a1; padding: 4px 10px; border-radius: 3px; font-size: 11px; font-weight: bold; cursor: pointer; transition: background 0.15s; }
+    .wait-btn:hover { background: #0ea5e9; }
+    .reset-time-btn { background: #475569; color: #f8fafc; border: 1px solid #334155; padding: 4px 10px; border-radius: 3px; font-size: 11px; font-weight: bold; cursor: pointer; transition: background 0.15s; }
+    .reset-time-btn:hover { background: #64748b; }
+    
+    /* Scroll Frame Bounds Layout */
+    .actor-list { 
+      display: flex; 
+      flex-direction: column; 
+      gap: 10px; 
+      width: 100%;
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    
+    .actor-row { 
+      display: flex; 
+      align-items: center; 
+      background: rgba(20, 20, 20, 0.45); 
+      border: 1px solid #444; 
+      border-radius: 6px; 
+      padding: 12px; 
+      gap: 18px;
+      width: 100%;
+      box-sizing: border-box;
+      transition: opacity 0.2s;
+    }
+
+    /* Immunity visual modifier filter overlay */
+    .actor-row.immune-cooldown {
+      background: rgba(25, 20, 20, 0.25);
+      border-color: #554444;
+    }
+    .immunity-text-badge {
+      font-size: 11px;
+      color: #f87171;
+      background: rgba(127, 29, 29, 0.4);
+      padding: 1px 6px;
+      border-radius: 3px;
+      margin-left: 8px;
+      font-weight: normal;
+      border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+    
+    /* Extra Large Token Profile Frame */
+    .token-portrait { 
+      width: 72px; 
+      height: 72px; 
+      flex-shrink: 0; 
+      display: flex; 
+      align-items: center; 
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.6);
+      border: 1px solid #111;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .token-portrait img { width: 100%; height: 100%; object-fit: contain; }
+
+    .character-details { flex-grow: 1; display: flex; flex-direction: column; gap: 8px; justify-content: center; }
+    .character-name { font-weight: bold; font-size: 1.25em; color: #FFF; text-shadow: 1px 1px 2px #000; line-height: 1.2; display: flex; align-items: center; }
+    
+    .health-bar-container { position: relative; background: #222; height: 22px; border-radius: 4px; border: 1px solid #111; overflow: hidden; width: 100%; }
+    .health-bar { background: linear-gradient(90deg, #800000 0%, #cc1111 100%); height: 100%; transition: width 0.3s ease; }
+    .hp-text { position: absolute; top: 0; left: 0; width: 100%; text-align: center; font-size: 12px; font-weight: bold; line-height: 20px; color: #fff; text-shadow: 1px 1px 1px #000; }
+
+    .action-controls { display: flex; align-items: center; gap: 12px; min-width: 270px; justify-content: flex-end; flex-shrink: 0; }
+    .accumulator-status { display: flex; flex-direction: column; align-items: flex-end; justify-content: center; margin-right: 8px; min-width: 100px; }
+    
+    .value-display { font-size: 1.6em; font-weight: bold; color: #22c55e; text-shadow: 1px 1px 1px #000; }
+    .value-display.damage-negative { color: #ef4444; }
+    
+    .heals-to-full-tag { font-size: 10px; color: #4ade80; font-weight: bold; text-transform: uppercase; margin-top: 4px; letter-spacing: 0.5px; }
+
+    .pf2e-btn { padding: 8px 14px; cursor: pointer; border-radius: 4px; font-weight: bold; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; border: 1px solid transparent; }
+    .roll-button { background: #3c5064; color: white; border-color: #1c2834; }
+    .roll-button:hover { background: #4a627c; }
+    
+    /* Disabled lockout design override configuration */
+    .roll-button.immune-disabled {
+      background: #2d2d30 !important;
+      color: #7a7a7a !important;
+      border-color: #1a1a1c !important;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .apply-button { background: #2e6f40; color: white; border-color: #1b4426; }
+    .apply-button:hover { background: #398a4f; }
+
+    /* Footer Button Panel Section Layout Elements */
+    .footer-action-tray {
+      display: flex;
+      width: 100%;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .apply-all-btn {
+      width: 100%;
+      justify-content: center;
+      background: linear-gradient(180deg, #15803d 0%, #166534 100%);
+      color: #fff;
+      border: 1px solid #14532d;
+      font-size: 14px;
+      padding: 10px 16px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+      transition: filter 0.15s;
+    }
+    .apply-all-btn:hover { filter: brightness(1.15); }
+  </style>
+</form>

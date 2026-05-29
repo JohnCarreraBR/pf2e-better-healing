@@ -1,0 +1,32 @@
+/* Core button formatting */
+.treat-wounds-tracker .accumulator-btn {
+    background: #111111;
+    color: #00ff00;
+    font-size: 24px;
+    font-weight: bold;
+    font-family: "Signika", sans-serif;
+    width: 85px;
+    height: 50px; 
+    line-height: 46px; 
+    border: 2px solid #444444;
+    border-radius: 4px;
+    cursor: pointer;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.8);
+    transition: all 0.15s ease-in-out;
+    padding: 0;
+    margin: 0;
+}
+
+/* Accent lines on hover interaction */
+.treat-wounds-tracker .accumulator-btn:hover {
+    background: #1a1a1a;
+    color: #33ff33;
+    border-color: #00ff00;
+    box-shadow: 0 0 8px rgba(0, 255, 0, 0.4), inset 0 0 3px rgba(0, 0, 0, 0.5);
+    transform: scale(1.03);
+}
+
+/* Micro click tactile interaction scaling */
+.treat-wounds-tracker .accumulator-btn:active {
+    transform: scale(0.97);
+}

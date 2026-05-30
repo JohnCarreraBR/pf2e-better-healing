@@ -1,19 +1,28 @@
 {
   "id": "pf2e-better-healing",
   "title": "PF2e Better Treat Wounds",
-  "version": "1.0.0",
+  "description": "Easy way to streamline the Treat Wounds Activity in PF2e",
+  "authors": [
+    {
+      "name": "John Carrera",
+      "flags": {}
+    }
+  ],
   "compatibility": {
     "minimum": "14",
     "verified": "14"
   },
-
   "esmodules": [
     "main.js"
   ],
-
-  "description": "<p>An easy way to streamline the Treat Wounds activity in PF2e</p>",
-  "flags": {
-    "canUpload": true
-  },
-  "action": "manageModule"
+  "styles": [
+    {
+      "src": "styles/module.css"
+    }
+  ],
+  "socket": true,
+  "version": "1.0.0",
+  "manifest": "https://githubusercontent.com",
+  "download": "https://github.com",
+  "url": "https://github.com/JohnCarreraBR/PF2e-better-healing"
 }

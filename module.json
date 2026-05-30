@@ -22,7 +22,7 @@
   ],
   "socket": true,
   "version": "1.0.0",
-  "manifest": "https://githubusercontent.com",
-  "download": "https://github.com",
+  "manifest": "https://raw.githubusercontent.com/JohnCarreraBR/pf2e-better-healing/refs/heads/main/module.json",
+  "download": "https://github.com/JohnCarreraBR/pf2e-better-healing/releases/download/idk/pf2e-better-healing.zip",
   "url": "https://github.com/JohnCarreraBR/PF2e-better-healing"
 }

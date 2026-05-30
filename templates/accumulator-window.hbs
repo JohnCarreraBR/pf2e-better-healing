@@ -1,15 +1,24 @@
 <form class="healing-accumulator-form" autocomplete="off">
 
   <div class="tracker-time-header">
-    <div class="time-block">
-      <i class="fas fa-clock"></i> Time Elapsed: <span class="time-value">{{timeDisplayString}}</span>
+    <div class="time-block-stack">
+      <div class="time-block">
+        <i class="fas fa-clock"></i> Time Elapsed: <span class="time-value">{{timeDisplayString}}</span>
+      </div>
+      
+      {{#if healerInfo.hasWardMedic}}
+        <div class="ward-medic-counter {{#if healerInfo.isAtCap}}at-capacity{{/if}}">
+          <i class="fas fa-hospital-user"></i> Batch Patients ({{healerInfo.name}}): 
+          <span class="counter-value">{{healerInfo.currentCount}} / {{healerInfo.maxPatients}}</span>
+        </div>
+      {{/if}}
     </div>
     
     <div class="header-buttons">
-      <button type="button" class="wait-btn" data-action="stepTimerTenMins" title="Advance time by 10 minutes">
+      <button type="button" class="wait-btn" data-action="stepTimerTenMins" title="Advance time by 10 minutes and start new treatment period">
         <i class="fas fa-hourglass-half"></i> Wait 10m
       </button>
-      <button type="button" class="reset-time-btn" data-action="resetTimer" title="Reset Session Clock & Immunity Timers">
+      <button type="button" class="reset-time-btn" data-action="resetTimer" title="Reset Session Clock, Immunities, & Batch list">
         <i class="fas fa-undo"></i> Reset
       </button>
     </div>
@@ -17,7 +26,7 @@
 
   <div class="actor-list">
     {{#each actors}}
-      <div class="actor-row {{#if this.isFull}}fully-healed{{/if}} {{#if this.isImmune}}immune-cooldown{{/if}}" data-id="{{this.id}}">
+      <div class="actor-row {{#if this.isFull}}fully-healed{{/if}} {{#if this.isImmune}}immune-cooldown{{/if}} {{#if this.treatedThisPeriod}}treated-this-turn{{/if}}" data-id="{{this.id}}">
         
         <div class="token-portrait">
           <img src="{{this.img}}" title="{{this.name}}" alt="{{this.name}}" />
@@ -26,6 +35,9 @@
         <div class="character-details">
           <div class="character-name">
             {{this.name}}
+            {{#if this.treatedThisPeriod}}
+              <span class="batch-text-badge"><i class="fas fa-notes-medical"></i> Selected in Batch</span>
+            {{/if}}
             {{#if this.isImmune}}
               <span class="immunity-text-badge"><i class="fas fa-shield-alt"></i> Immune ({{this.cooldownRemaining}}m)</span>
             {{/if}}
@@ -85,7 +97,6 @@
       gap: 12px;
     }
 
-    /* Duration Header Styles */
     .tracker-time-header {
       display: flex;
       justify-content: space-between;
@@ -96,16 +107,20 @@
       padding: 8px 14px;
       flex-shrink: 0;
     }
+    .time-block-stack { display: flex; flex-direction: column; gap: 4px; }
     .time-block { font-size: 1.15em; font-weight: bold; color: #e2e8f0; display: flex; align-items: center; gap: 8px; }
     .time-value { color: #38bdf8; text-shadow: 1px 1px 1px #000; font-family: monospace; font-size: 1.2em; }
     
-    .header-buttons { display: flex; gap: 6px; }
-    .wait-btn { background: #0284c7; color: #fff; border: 1px solid #0369a1; padding: 4px 10px; border-radius: 3px; font-size: 11px; font-weight: bold; cursor: pointer; transition: background 0.15s; }
+    .ward-medic-counter { font-size: 11px; color: #94a3b8; font-weight: bold; display: flex; align-items: center; gap: 6px; }
+    .ward-medic-counter .counter-value { color: #fbbf24; font-size: 12px; font-family: monospace; }
+    .ward-medic-counter.at-capacity .counter-value { color: #ef4444; }
+
+    .header-buttons { display: flex; gap: 6px; align-items: center; }
+    .wait-btn { background: #0284c7; color: #fff; border: 1px solid #0369a1; padding: 6px 12px; border-radius: 3px; font-size: 12px; font-weight: bold; cursor: pointer; transition: background 0.15s; }
     .wait-btn:hover { background: #0ea5e9; }
-    .reset-time-btn { background: #475569; color: #f8fafc; border: 1px solid #334155; padding: 4px 10px; border-radius: 3px; font-size: 11px; font-weight: bold; cursor: pointer; transition: background 0.15s; }
+    .reset-time-btn { background: #475569; color: #f8fafc; border: 1px solid #334155; padding: 6px 12px; border-radius: 3px; font-size: 12px; font-weight: bold; cursor: pointer; transition: background 0.15s; }
     .reset-time-btn:hover { background: #64748b; }
     
-    /* Scroll Frame Bounds Layout */
     .actor-list { 
       display: flex; 
       flex-direction: column; 
@@ -127,10 +142,24 @@
       gap: 18px;
       width: 100%;
       box-sizing: border-box;
-      transition: opacity 0.2s;
+      transition: background-color 0.2s, border-color 0.2s;
     }
 
-    /* Immunity visual modifier filter overlay */
+    .actor-row.treated-this-turn {
+      background: rgba(30, 41, 59, 0.5);
+      border-color: #3b82f6;
+    }
+    .batch-text-badge {
+      font-size: 11px;
+      color: #60a5fa;
+      background: rgba(30, 58, 138, 0.4);
+      padding: 1px 6px;
+      border-radius: 3px;
+      margin-left: 8px;
+      font-weight: normal;
+      border: 1px solid rgba(96, 165, 250, 0.2);
+    }
+
     .actor-row.immune-cooldown {
       background: rgba(25, 20, 20, 0.25);
       border-color: #554444;
@@ -146,7 +175,6 @@
       border: 1px solid rgba(239, 68, 68, 0.2);
     }
     
-    /* Extra Large Token Profile Frame */
     .token-portrait { 
       width: 72px; 
       height: 72px; 
@@ -162,7 +190,7 @@
     .token-portrait img { width: 100%; height: 100%; object-fit: contain; }
 
     .character-details { flex-grow: 1; display: flex; flex-direction: column; gap: 8px; justify-content: center; }
-    .character-name { font-weight: bold; font-size: 1.25em; color: #FFF; text-shadow: 1px 1px 2px #000; line-height: 1.2; display: flex; align-items: center; }
+    .character-name { font-weight: bold; font-size: 1.25em; color: #FFF; text-shadow: 1px 1px 2px #000; line-height: 1.2; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
     
     .health-bar-container { position: relative; background: #222; height: 22px; border-radius: 4px; border: 1px solid #111; overflow: hidden; width: 100%; }
     .health-bar { background: linear-gradient(90deg, #800000 0%, #cc1111 100%); height: 100%; transition: width 0.3s ease; }
@@ -180,7 +208,6 @@
     .roll-button { background: #3c5064; color: white; border-color: #1c2834; }
     .roll-button:hover { background: #4a627c; }
     
-    /* Disabled lockout design override configuration */
     .roll-button.immune-disabled {
       background: #2d2d30 !important;
       color: #7a7a7a !important;
@@ -192,7 +219,6 @@
     .apply-button { background: #2e6f40; color: white; border-color: #1b4426; }
     .apply-button:hover { background: #398a4f; }
 
-    /* Footer Button Panel Section Layout Elements */
     .footer-action-tray {
       display: flex;
       width: 100%;

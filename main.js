@@ -18,7 +18,7 @@ class TreatWoundsAccumulator extends HandlebarsApplicationMixin(ApplicationV2) {
     },
     position: { 
       width: 720, 
-      height: 580 
+      height: 620 
     }
   };
 
@@ -34,6 +34,7 @@ class TreatWoundsAccumulator extends HandlebarsApplicationMixin(ApplicationV2) {
     this.cooldowns = {}; 
     this.minutesPassed = 0;
     this.lastTargetActorId = null;
+    this.treatedThisPeriod = []; 
   }
 
   async _prepareContext(options) {
@@ -42,6 +43,34 @@ class TreatWoundsAccumulator extends HandlebarsApplicationMixin(ApplicationV2) {
     const hours = Math.floor(this.minutesPassed / 60);
     const mins = this.minutesPassed % 60;
     context.timeDisplayString = `${hours}h ${mins}m`;
+
+    const controlledTokens = canvas.tokens.controlled;
+    const healerActor = controlledTokens[0]?.actor;
+    
+    let maxPatients = 1;
+    let healerName = "No Healer Selected";
+    let hasWardMedic = false;
+
+    if (healerActor) {
+      healerName = healerActor.name;
+      hasWardMedic = healerActor.itemTypes?.feat?.some(f => f.slug === "ward-medic" || f.name.toLowerCase().includes("ward medic"));
+      
+      if (hasWardMedic) {
+        // Robust fetch utilizing official PF2e system operational wrappers
+        const medRank = healerActor.skills?.medicine?.rank ?? healerActor.system.skills?.med?.rank ?? 0;
+        if (medRank >= 4) maxPatients = 8;       // Legendary
+        else if (medRank === 3) maxPatients = 4;  // Master
+        else maxPatients = 2;                     // Trained / Expert
+      }
+    }
+
+    context.healerInfo = {
+      name: healerName,
+      currentCount: this.treatedThisPeriod.length,
+      maxPatients: maxPatients,
+      isAtCap: this.treatedThisPeriod.length >= maxPatients,
+      hasWardMedic: hasWardMedic
+    };
 
     const targets = game.actors.party?.members.map(m => m.getActiveTokens()[0] || m) || [];
 
@@ -76,7 +105,8 @@ class TreatWoundsAccumulator extends HandlebarsApplicationMixin(ApplicationV2) {
         accumulatedHealing: accumulated,
         accumulatedHealsToFull: missingHp > 0 && accumulated >= missingHp,
         isImmune: isImmune,
-        cooldownRemaining: remainingCooldown
+        cooldownRemaining: remainingCooldown,
+        treatedThisPeriod: this.treatedThisPeriod.includes(actor.id)
       };
     }).filter(Boolean);
 
@@ -122,11 +152,46 @@ class TreatWoundsAccumulator extends HandlebarsApplicationMixin(ApplicationV2) {
       }
       const healerActor = controlledTokens[0].actor;
 
+      let maxPatients = 1;
+      const hasWardMedic = healerActor.itemTypes?.feat?.some(f => f.slug === "ward-medic" || f.name.toLowerCase().includes("ward medic"));
+      if (hasWardMedic) {
+        const medRank = healerActor.skills?.medicine?.rank ?? healerActor.system.skills?.med?.rank ?? 0;
+        if (medRank >= 4) maxPatients = 8;
+        else if (medRank === 3) maxPatients = 4;
+        else maxPatients = 2;
+      }
+
+      if (this.treatedThisPeriod.length >= maxPatients && !this.treatedThisPeriod.includes(targetActorId)) {
+        ui.notifications.warn(`${healerActor.name} has already reached their Ward Medic capacity limit of ${maxPatients} patients for this period.`);
+        return;
+      }
+
       if (game.pf2e.actions.treatWounds) {
          this.lastTargetActorId = targetActorId;
 
-         this.cooldowns[targetActorId] = this.minutesPassed + 60;
-         this.minutesPassed += 10;
+         if (!this.treatedThisPeriod.includes(targetActorId)) {
+            this.treatedThisPeriod.push(targetActorId);
+         }
+
+         const hasContinualRecovery = healerActor?.itemTypes?.feat?.some(f => f.slug === "continual-recovery" || f.name.toLowerCase().includes("continual recovery"));
+         
+         if (hasContinualRecovery) {
+           this.cooldowns[targetActorId] = this.minutesPassed + 10;
+         } else {
+           this.cooldowns[targetActorId] = this.minutesPassed + 60;
+         }
+
+         // AUTOMATIC TIME ADVANCEMENT CAP CHECK
+         let autoAdvancedTime = false;
+         if (this.treatedThisPeriod.length === maxPatients) {
+            this.minutesPassed += 10;
+            this.treatedThisPeriod = []; 
+            autoAdvancedTime = true;
+         } else if (!hasWardMedic) {
+            // Standard healer loop: Fall back to automatically advancing time per individual treatment
+            this.minutesPassed += 10;
+            this.treatedThisPeriod = [];
+         }
 
          const targetTokenInstance = targetActor.getActiveTokens()[0];
          if (targetTokenInstance) {
@@ -137,6 +202,10 @@ class TreatWoundsAccumulator extends HandlebarsApplicationMixin(ApplicationV2) {
            actors: [healerActor],
            event: event
          });
+         
+         if (autoAdvancedTime) {
+            ui.notifications.info("Ward Medic capacity limit reached. Session time automatically advanced by 10 minutes!");
+         }
          
          this.render();
       } else {
@@ -204,13 +273,16 @@ class TreatWoundsAccumulator extends HandlebarsApplicationMixin(ApplicationV2) {
 
     stepTimerTenMins: function(event, button) {
       this.minutesPassed += 10;
+      this.treatedThisPeriod = []; 
+      ui.notifications.info("Advanced session clock by 10 minutes. A new treatment period has begun.");
       this.render();
     },
 
     resetTimer: function(event, button) {
       this.minutesPassed = 0;
       this.cooldowns = {}; 
-      ui.notifications.info("Treatment tracking metrics and immunities reset to zero.");
+      this.treatedThisPeriod = [];
+      ui.notifications.info("Treatment tracking metrics, immunities, and batch counts reset to zero.");
       this.render();
     }
   };
@@ -239,66 +311,81 @@ Hooks.on("updateActor", (actor, changes, options, userId) => {
  * CHAT INTERCEPTOR
  */
 Hooks.on("createChatMessage", (message, options, userId) => {
+  const textContent = (message.content || "") + (message.flavor || "");
+  const lowerText = textContent.toLowerCase();
+
   const isTreatWounds = message.flags?.pf2e?.context?.action === "treat-wounds" || 
-                        message.flavor?.toLowerCase().includes("treat wounds");
+                        lowerText.includes("treat wounds");
 
   if (isTreatWounds) {
-    let rollValue = message.rolls?.[0]?.total || 0;
-    if (rollValue <= 0) return;
-
     const openWindow = foundry.applications.instances.get("pf2e-treat-wounds-accumulator");
-    if (openWindow) {
-        let actualMatchedId = null;
+    if (!openWindow) return;
 
-        if (openWindow.lastTargetActorId && openWindow.accumulatorData[openWindow.lastTargetActorId] !== undefined) {
-            actualMatchedId = openWindow.lastTargetActorId;
-            openWindow.lastTargetActorId = null;
-        } else if (message.flags?.pf2e?.context?.target?.actor && openWindow.accumulatorData[message.flags.pf2e.context.target.actor] !== undefined) {
-            actualMatchedId = message.flags.pf2e.context.target.actor;
-        } else {
-            for (const key of Object.keys(openWindow.accumulatorData)) {
-                const checkActor = game.actors.get(key);
-                if (checkActor && message.flavor?.includes(checkActor.name)) {
-                    actualMatchedId = key;
-                    break;
-                }
+    let actualMatchedId = null;
+
+    if (openWindow.lastTargetActorId) {
+        actualMatchedId = openWindow.lastTargetActorId;
+    } else if (message.flags?.pf2e?.context?.target?.actor) {
+        actualMatchedId = message.flags.pf2e.context.target.actor;
+    } else {
+        for (const key of Object.keys(openWindow.accumulatorData)) {
+            const checkActor = game.actors.get(key);
+            if (checkActor && textContent.includes(checkActor.name)) {
+                actualMatchedId = key;
+                break;
             }
-        }
-
-        if (!actualMatchedId && message.actor?.id && openWindow.accumulatorData[message.actor.id] !== undefined) {
-            actualMatchedId = message.actor.id;
-        }
-
-        if (actualMatchedId) {
-            const targetActor = game.actors.get(actualMatchedId);
-            
-            const isCritFail = message.flags?.pf2e?.context?.outcome === "criticalFailure" || 
-                               message.flags?.pf2e?.context?.outcome === 0 ||
-                               message.flavor?.toLowerCase().includes("critical failure");
-
-            if (isCritFail) {
-                openWindow.accumulatorData[actualMatchedId] = (openWindow.accumulatorData[actualMatchedId] || 0) - rollValue;
-                ui.notifications.error(`Critical Failure! Subtracted ${rollValue} from ${targetActor ? targetActor.name : "target"}'s pool.`);
-            } else {
-                // ROBUST HEALTH FEAT CHECK
-                let robustBonusText = "";
-                if (targetActor) {
-                    // Check if the target creature has the Robust Health feat item embedded on their sheet
-                    const hasRobustHealth = targetActor.itemTypes?.feat?.some(f => f.slug === "robust-health" || f.name.toLowerCase().includes("robust health"));
-                    
-                    if (hasRobustHealth) {
-                        const targetLevel = targetActor.level || 1;
-                        rollValue += targetLevel;
-                        robustBonusText = ` (Includes Robust Health bonus of +${targetLevel})`;
-                    }
-                }
-
-                openWindow.accumulatorData[actualMatchedId] = (openWindow.accumulatorData[actualMatchedId] || 0) + rollValue;
-                ui.notifications.info(`Added +${rollValue} to ${targetActor ? targetActor.name : "target"}'s pool!${robustBonusText}`);
-            }
-            
-            openWindow.render();
         }
     }
+
+    if (!actualMatchedId) return;
+    const targetActor = game.actors.get(actualMatchedId);
+
+    let rollValue = message.rolls?.[0]?.total || 0;
+    
+    if (message.flags?.pf2e?.context?.type === "skill-check" && !lowerText.includes("healing")) {
+       return; 
+    }
+
+    if (rollValue === 0 || lowerText.includes("regains") || lowerText.includes("takes")) {
+       const regMatch = textContent.match(/\b\d+\b/);
+       if (regMatch) rollValue = parseInt(regMatch[0], 10);
+    }
+    if (rollValue <= 0) return;
+
+    openWindow.lastTargetActorId = null;
+
+    const isCritFail = message.flags?.pf2e?.context?.outcome === "criticalFailure" || 
+                       message.flags?.pf2e?.context?.outcome === 0 ||
+                       lowerText.includes("critical failure") ||
+                       lowerText.includes("takes"); 
+
+    if (isCritFail) {
+        openWindow.accumulatorData[actualMatchedId] = (openWindow.accumulatorData[actualMatchedId] || 0) - rollValue;
+        ui.notifications.error(`Critical Failure! Subtracted ${rollValue} from ${targetActor ? targetActor.name : "target"}.`);
+    } else {
+        let appliedBonuses = [];
+
+        if (targetActor) {
+            const hasRobustHealth = targetActor.itemTypes?.feat?.some(f => f.slug === "robust-health" || f.name.toLowerCase().includes("robust health"));
+            if (hasRobustHealth) {
+                const targetLevel = targetActor.level || 1;
+                rollValue += targetLevel;
+                appliedBonuses.push(`Robust Health +${targetLevel}`);
+            }
+
+            const hasGodlessHealing = targetActor.itemTypes?.feat?.some(f => f.slug === "godless-healing" || f.name.toLowerCase().includes("godless healing"));
+            if (hasGodlessHealing) {
+                rollValue += 5;
+                appliedBonuses.push(`Godless Healing +5`);
+            }
+        }
+
+        const bonusString = appliedBonuses.length > 0 ? ` (${appliedBonuses.join(", ")})` : "";
+
+        openWindow.accumulatorData[actualMatchedId] = (openWindow.accumulatorData[actualMatchedId] || 0) + rollValue;
+        ui.notifications.info(`Added +${rollValue} to ${targetActor ? targetActor.name : "target"}!${bonusString}`);
+    }
+    
+    openWindow.render();
   }
 });
